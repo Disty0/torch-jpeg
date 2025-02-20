@@ -131,7 +131,7 @@ class JPEGEncoder(ImageProcessingMixin, ConfigMixin):
 
         Returns:
             `torch.Tensor`:
-                The encoded SoteV3 Latents.
+                The encoded JPEG Latents.
         """
 
         if isinstance(images, list):
