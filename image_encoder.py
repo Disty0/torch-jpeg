@@ -45,13 +45,12 @@ def encode_single_channel_dct_2d(img: torch.FloatTensor, block_size: int=16, nor
 
     # batch_size, h_blocks, w_blocks, block_size_h, block_size_w
     dct_tensor = img.view(batch_size, h_blocks, block_size, w_blocks, block_size).transpose(2,3).float()
-
-    # batch_size, h_blocks, w_blocks, combined_block_size
-    dct_tensor = dct_2d(dct_tensor, norm=norm).reshape(batch_size, h_blocks, w_blocks, block_size*block_size)
+    dct_tensor = dct_2d(dct_tensor, norm=norm)
 
     # batch_size, combined_block_size, h_blocks, w_blocks
-    dct_tensor = dct_tensor.permute(0,3,1,2)
+    dct_tensor = dct_tensor.reshape(batch_size, h_blocks, w_blocks, block_size*block_size).permute(0,3,1,2)
     return dct_tensor
+
 
 def decode_single_channel_dct_2d(img: torch.FloatTensor, norm: str='ortho') -> torch.FloatTensor:
     batch_size, combined_block_size, h_blocks, w_blocks = img.shape
