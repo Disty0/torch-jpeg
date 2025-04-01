@@ -14,7 +14,7 @@ from transformers import ImageProcessingMixin
 from .torch_dct import dct_2d, idct_2d
 
 
-def rgb_to_ycbcr_tensor(image: torch.Tensor) -> torch.Tensor:
+def rgb_to_ycbcr_tensor(image: torch.ByteTensor) -> torch.FloatTensor:
     img = image.float() / 255
     y = (img[:,:,:,0] * 0.299) + (img[:,:,:,1] * 0.587) + (img[:,:,:,2] * 0.114)
     cb = 0.5 + (img[:,:,:,0] * -0.168935) + (img[:,:,:,1] * -0.331665) + (img[:,:,:,2] * 0.50059)
@@ -24,7 +24,7 @@ def rgb_to_ycbcr_tensor(image: torch.Tensor) -> torch.Tensor:
     return ycbcr
 
 
-def ycbcr_tensor_to_rgb(ycbcr: torch.Tensor) -> torch.Tensor:
+def ycbcr_tensor_to_rgb(ycbcr: torch.FloatTensor) -> torch.ByteTensor:
     ycbcr_img = (ycbcr / 2) + 0.5
     y = ycbcr_img[:,0,:,:]
     cb = ycbcr_img[:,1,:,:] - 0.5
@@ -38,42 +38,34 @@ def ycbcr_tensor_to_rgb(ycbcr: torch.Tensor) -> torch.Tensor:
     return rgb
 
 
-def encode_single_channel_dct_2d(img: torch.Tensor, block_size: int=16, norm: str='ortho') -> torch.Tensor:
+def encode_single_channel_dct_2d(img: torch.FloatTensor, block_size: int=16, norm: str='ortho') -> torch.FloatTensor:
     batch_size, height, width = img.shape
     h_blocks = int(height//block_size)
     w_blocks = int(width//block_size)
 
-    dct_tensor = torch.zeros((batch_size, h_blocks, w_blocks, block_size, block_size), device=img.device, dtype=torch.float32)
-    for h in range(h_blocks):
-        for w in range(w_blocks):
-            dct_tensor[:, h,w] = img[:, h*block_size:(h+1)*block_size, w*block_size:(w+1)*block_size]
-    dct_tensor = dct_2d(dct_tensor, norm=norm).reshape(batch_size, h_blocks, w_blocks, block_size*block_size)
-    dct_tensor = dct_tensor.transpose(3,1).transpose(2,3)
+    # batch_size, h_blocks, w_blocks, block_size_h, block_size_w
+    dct_tensor = img.view(batch_size, h_blocks, block_size, w_blocks, block_size).transpose(2,3).float()
 
+    # batch_size, h_blocks, w_blocks, combined_block_size
+    dct_tensor = dct_2d(dct_tensor, norm=norm).reshape(batch_size, h_blocks, w_blocks, block_size*block_size)
+
+    # batch_size, combined_block_size, h_blocks, w_blocks
+    dct_tensor = dct_tensor.permute(0,3,1,2)
     return dct_tensor
 
-
-def decode_single_channel_dct_2d(img: torch.Tensor, norm: str='ortho') -> torch.Tensor:
+def decode_single_channel_dct_2d(img: torch.FloatTensor, norm: str='ortho') -> torch.FloatTensor:
     batch_size, combined_block_size, h_blocks, w_blocks = img.shape
     block_size = int(math.sqrt(combined_block_size))
     height = int(h_blocks*block_size)
     width = int(w_blocks*block_size)
 
-    idct_tensor = torch.zeros((batch_size, h_blocks, w_blocks, block_size, block_size), device=img.device, dtype=torch.float32)
-    for h in range(h_blocks):
-        for w in range(w_blocks):
-            idct_tensor[:, h:h+1, w:w+1] = img[:, :,h,w].reshape(batch_size, 1, 1, block_size, block_size)
-    idct_tensor = idct_2d(idct_tensor, norm=norm)
-
-    img_tensor = torch.zeros((batch_size, height, width), device=img.device, dtype=torch.float32)
-    for h in range(h_blocks):
-        for w in range(w_blocks):
-            img_tensor[:, h*block_size:(h+1)*block_size, w*block_size:(w+1)*block_size] = idct_tensor[:, h,w]
-
+    img_tensor = img.permute(0,2,3,1).view(batch_size, h_blocks, w_blocks, block_size, block_size)
+    img_tensor = idct_2d(img_tensor, norm=norm)
+    img_tensor = img_tensor.permute(0,1,3,2,4).reshape(batch_size, height, width)
     return img_tensor
 
 
-def encode_jpeg_tensor(img: torch.Tensor, block_size: int=16, cbcr_downscale: int=2, norm: str='ortho') -> torch.Tensor:
+def encode_jpeg_tensor(img: torch.FloatTensor, block_size: int=16, cbcr_downscale: int=2, norm: str='ortho') -> torch.FloatTensor:
     img = img[:, :, :(img.shape[-2]//block_size)*block_size, :(img.shape[-1]//block_size)*block_size] # crop to a multiply of block_size
     _, _, height, width = img.shape
     downsample = torchvision.transforms.Resize((height//cbcr_downscale, width//cbcr_downscale), interpolation=torchvision.transforms.InterpolationMode.BICUBIC)
@@ -84,7 +76,7 @@ def encode_jpeg_tensor(img: torch.Tensor, block_size: int=16, cbcr_downscale: in
     return torch.cat([y,cb,cr], dim=1)
 
 
-def decode_jpeg_tensor(jpeg_img: torch.Tensor, block_size: int=16, cbcr_downscale: int=2, norm: str='ortho') -> torch.Tensor:
+def decode_jpeg_tensor(jpeg_img: torch.FloatTensor, block_size: int=16, cbcr_downscale: int=2, norm: str='ortho') -> torch.FloatTensor:
     _, _, h_blocks, w_blocks = jpeg_img.shape
     y_block_size = block_size*block_size
     cbcr_block_size = int((block_size//cbcr_downscale)*(block_size//cbcr_downscale))
@@ -120,7 +112,7 @@ class JPEGEncoder(ImageProcessingMixin, ConfigMixin):
         self.latents_mean = latents_mean
 
 
-    def encode(self, images: PipelineImageInput, device: str="cpu") -> torch.Tensor:
+    def encode(self, images: PipelineImageInput, device: str="cpu") -> torch.FloatTensor:
         """
         Encode RGB 0-255 image to JPEG Latents.
 
@@ -176,7 +168,7 @@ class JPEGEncoder(ImageProcessingMixin, ConfigMixin):
 
         return latents
 
-    def decode(self, latents: torch.Tensor, return_type: str="pil") -> PipelineImageInput:
+    def decode(self, latents: torch.FloatTensor, return_type: str="pil") -> PipelineImageInput:
         latents = latents.to(dtype=torch.float32)
         if self.latents_std is not None:
             latents = latents * torch.tensor(self.latents_std, device=latents.device, dtype=torch.float32).view(1,-1,1,1)
