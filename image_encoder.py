@@ -93,6 +93,40 @@ def decode_jpeg_tensor(jpeg_img: torch.FloatTensor, block_size: int=16, cbcr_dow
     return torch.stack([y,cb,cr], dim=1)
 
 
+def process_image_input(images: PipelineImageInput) -> torch.ByteTensor:
+    if isinstance(images, list):
+        combined_images = []
+        for img in images:
+            if isinstance(img, Image.Image):
+                img = torch.from_numpy(np.asarray(img).copy()).unsqueeze(0)
+                combined_images.append(img)
+            elif isinstance(img, np.ndarray):
+                if len(img.shape) == 3:
+                    img = img.unsqueeze(0)
+                img = torch.from_numpy(img)
+                combined_images.append(img)
+            elif isinstance(img, torch.Tensor):
+                if len(img.shape) == 3:
+                    img = img.unsqueeze(0)
+                combined_images.append(img)
+            else:
+                raise RuntimeError(f"Invalid input! Given: {type(img)} should be in ('torch.Tensor', 'np.ndarray', 'PIL.Image.Image')")
+        combined_images = torch.cat(combined_images, dim=0)
+    elif isinstance(images, Image.Image):
+        combined_images = torch.from_numpy(np.asarray(images).copy()).unsqueeze(0)
+    elif isinstance(images, np.ndarray):
+        combined_images = torch.from_numpy(images)
+        if len(combined_images.shape) == 3:
+            combined_images = combined_images.unsqueeze(0)
+    elif isinstance(images, torch.Tensor):
+        combined_images = images
+        if len(combined_images.shape) == 3:
+            combined_images = combined_images.unsqueeze(0)
+    else:
+        raise RuntimeError(f"Invalid input! Given: {type(images)} should be in ('torch.Tensor', 'np.ndarray', 'PIL.Image.Image')")
+    return combined_images
+
+
 class JPEGEncoder(ImageProcessingMixin, ConfigMixin):
 
     config_name = CONFIG_NAME
@@ -127,38 +161,7 @@ class JPEGEncoder(ImageProcessingMixin, ConfigMixin):
                 The encoded JPEG Latents.
         """
 
-        if isinstance(images, list):
-            combined_images = []
-            for img in images:
-                if isinstance(img, Image.Image):
-                    img = torch.from_numpy(np.asarray(img).copy()).unsqueeze(0)
-                    combined_images.append(img)
-                elif isinstance(img, np.ndarray):
-                    if len(img.shape) == 3:
-                        img = img.unsqueeze(0)
-                    img = torch.from_numpy(img)
-                    combined_images.append(img)
-                elif isinstance(img, torch.Tensor):
-                    if len(img.shape) == 3:
-                        img = img.unsqueeze(0)
-                    combined_images.append(img)
-                else:
-                    raise RuntimeError(f"Invalid input! Given: {type(img)} should be in ('torch.Tensor', 'np.ndarray', 'PIL.Image.Image')")
-            combined_images = torch.cat(combined_images, dim=0)
-        elif isinstance(images, Image.Image):
-            combined_images = torch.from_numpy(np.asarray(images).copy()).unsqueeze(0)
-        elif isinstance(images, np.ndarray):
-            combined_images = torch.from_numpy(images)
-            if len(combined_images.shape) == 3:
-                combined_images = combined_images.unsqueeze(0)
-        elif isinstance(images, torch.Tensor):
-            combined_images = images
-            if len(combined_images.shape) == 3:
-                combined_images = combined_images.unsqueeze(0)
-        else:
-            raise RuntimeError(f"Invalid input! Given: {type(images)} should be in ('torch.Tensor', 'np.ndarray', 'PIL.Image.Image')")
-
-        combined_images = combined_images.to(device)
+        combined_images = process_image_input(images).to(device)
         latents = rgb_to_ycbcr_tensor(combined_images)
         latents = encode_jpeg_tensor(latents, block_size=self.block_size, cbcr_downscale=self.cbcr_downscale, norm=self.norm)
 
