@@ -173,6 +173,7 @@ class JPEGEncoder(ImageProcessingMixin, ConfigMixin):
         self.norm = norm
         self.latents_std = latents_std
         self.latents_mean = latents_mean
+        super().__init__()
 
     def encode(self, images: PipelineImageInput, device: str="cpu") -> torch.FloatTensor:
         """
