@@ -21,7 +21,7 @@ def dct(x, norm=None):
     v = torch.cat([x[:, ::2], x[:, 1::2].flip([1])], dim=1)
     Vc = torch.view_as_real(torch.fft.fft(v, dim=1))
 
-    k = - torch.arange(N, dtype=x.dtype, device=x.device)[None, :] * (math.pi / (2 * N))
+    k = - torch.arange(N, dtype=x.dtype, device=x.device).unsqueeze(0) * (math.pi / (2 * N))
     V = Vc[:, :, 0] * torch.cos(k) - Vc[:, :, 1] * torch.sin(k)
 
     if norm == 'ortho':
@@ -55,7 +55,7 @@ def idct(X, norm=None):
         X_v[:, 0] = X_v[:, 0] * (math.sqrt(N) * 2)
         X_v[:, 1:] = X_v[:, 1:] * (math.sqrt(N / 2) * 2)
 
-    k = torch.arange(N, dtype=X.dtype, device=X.device)[None, :] * (math.pi / (2 * N))
+    k = torch.arange(N, dtype=X.dtype, device=X.device).unsqueeze(0) * (math.pi / (2 * N))
     W_r = torch.cos(k)
     W_i = torch.sin(k)
 
