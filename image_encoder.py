@@ -15,26 +15,23 @@ from .torch_dct import dct_2d, idct_2d
 
 
 def rgb_to_ycbcr_tensor(image: torch.ByteTensor) -> torch.FloatTensor:
-    img = image.to(dtype=torch.float32) / 255
-    y = (img[:,:,:,0] * 0.299) + (img[:,:,:,1] * 0.587) + (img[:,:,:,2] * 0.114)
-    cb = 0.5 + (img[:,:,:,0] * -0.168935) + (img[:,:,:,1] * -0.331665) + (img[:,:,:,2] * 0.50059)
-    cr = 0.5 + (img[:,:,:,0] * 0.499813) + (img[:,:,:,1] * -0.418531) + (img[:,:,:,2] * -0.081282)
-    ycbcr = torch.stack([y,cb,cr], dim=1)
+    r, g, b = (image.to(dtype=torch.float32) / 255).split(1, dim=-1)
+    y = (r * 0.299) + (g * 0.587) + (b * 0.114)
+    cb = 0.5 + (r * -0.168735892) + (g * -0.331264108) + (b * 0.5)
+    cr = 0.5 + (r * 0.5) + (g * -0.418687589) + (b * -0.081312411)
+    ycbcr = torch.cat([y,cb,cr], dim=-1).permute(0,3,1,2)
     ycbcr = (ycbcr - 0.5) * 2
     return ycbcr
 
 
 def ycbcr_tensor_to_rgb(ycbcr: torch.FloatTensor) -> torch.ByteTensor:
-    ycbcr_img = (ycbcr / 2)
-    y = ycbcr_img[:,0,:,:] + 0.5
-    cb = ycbcr_img[:,1,:,:]
-    cr = ycbcr_img[:,2,:,:]
-
-    r = y + (cr * 1.402525)
-    g = y + (cb * -0.343730) + (cr * -0.714401)
-    b = y + (cb * 1.769905) + (cr * 0.000013)
-    rgb = torch.stack([r,g,b], dim=-1)
-    rgb = (rgb * 255).round().clamp(0,255).to(torch.uint8)
+    y, cb, cr = (ycbcr / 2).split(1, dim=1)
+    y = y + 0.5
+    r = y + (cr * 1.402)
+    g = y + (cb * -0.344136286) + (cr * -0.714136286)
+    b = y + (cb * 1.772)
+    rgb = torch.cat([r,g,b], dim=-3).permute(0,2,3,1)
+    rgb = (rgb * 255).round().clamp(0,255).to(dtype=torch.uint8)
     return rgb
 
 

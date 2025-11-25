@@ -22,17 +22,13 @@ def dct(x, norm=None):
     Vc = torch.view_as_real(torch.fft.fft(v, dim=1))
 
     k = - torch.arange(N, dtype=x.dtype, device=x.device)[None, :] * (math.pi / (2 * N))
-    W_r = torch.cos(k)
-    W_i = torch.sin(k)
-
-    V = Vc[:, :, 0] * W_r - Vc[:, :, 1] * W_i
+    V = Vc[:, :, 0] * torch.cos(k) - Vc[:, :, 1] * torch.sin(k)
 
     if norm == 'ortho':
         V[:, 0] = V[:, 0] / (math.sqrt(N) * 2)
         V[:, 1:] = V[:, 1:] / (math.sqrt(N / 2) * 2)
 
-    V = 2 * V.view(x_shape)
-
+    V = V.view(x_shape) * 2
     return V
 
 
@@ -68,15 +64,15 @@ def idct(X, norm=None):
 
     V_r = V_t_r * W_r - V_t_i * W_i
     V_i = V_t_r * W_i + V_t_i * W_r
-
-    V = torch.cat([V_r.unsqueeze(2), V_i.unsqueeze(2)], dim=2)
+    V = torch.stack([V_r, V_i], dim=2)
 
     v = torch.fft.irfft(torch.view_as_complex(V), n=V.shape[1], dim=1)
     x = v.new_zeros(v.shape)
     x[:, ::2] = v[:, :N - (N // 2)]
     x[:, 1::2] = v.flip([1])[:, :N // 2]
 
-    return x.view(x_shape)
+    x = x.view(x_shape)
+    return x
 
 
 def dct_2d(x, norm=None):
