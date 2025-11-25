@@ -26,7 +26,7 @@ def get_dct_norm(N: int, device: torch.device) -> torch.FloatTensor:
     return n
 
 
-def dct_2d(x, norm=None):
+def dct_2d(x: torch.FloatTensor, norm: str="ortho") -> torch.FloatTensor:
     x_shape = x.shape
     N = x_shape[-1]
     x = x.contiguous().view(-1, N, N)
@@ -40,7 +40,7 @@ def dct_2d(x, norm=None):
     return coeff
 
 
-def idct_2d(coeff, norm=None):
+def idct_2d(coeff: torch.FloatTensor, norm: str="ortho") -> torch.FloatTensor:
     x_shape = coeff.shape
     N = x_shape[-1]
     coeff = coeff.contiguous().view(-1, N, N)
